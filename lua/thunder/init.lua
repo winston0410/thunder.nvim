@@ -19,6 +19,19 @@ end
 M.setup = function(opts)
     M.options = vim.tbl_deep_extend("force", {}, default_opts, opts or {})
 
+    local links = {
+      FlashBackdrop = "Comment",
+      FlashMatch = "Search",
+      FlashCurrent = "IncSearch",
+      FlashLabel = "Substitute",
+      FlashPrompt = "MsgArea",
+      FlashPromptIcon = "Special",
+      FlashCursor = "Cursor",
+    }
+    for hl_group, link in pairs(links) do
+      vim.api.nvim_set_hl(0, hl_group, { link = link, default = true })
+    end
+
     local group = vim.api.nvim_create_augroup("thunder", { clear = true })
     vim.api.nvim_create_autocmd("CmdlineChanged", {
         group = group,
@@ -71,8 +84,7 @@ end
 
 M.update = function()
     local pattern = vim.fn.getcmdline()
-    -- when doing // or ??, get the pattern from the search register
-    -- See :h search-commands
+    -- REF https://github.com/folke/flash.nvim/blob/fcea7ff883235d9024dc41e638f164a450c14ca2/lua/flash/plugins/search.lua#L51
     if pattern:sub(1, 1) == vim.fn.getcmdtype() then
         pattern = vim.fn.getreg("/") .. pattern:sub(2)
     end
