@@ -2,6 +2,7 @@ local M = {}
 local THUNDER_NS = vim.api.nvim_create_namespace('thunder')
 local ESC_KEY = vim.api.nvim_replace_termcodes('<esc>', true, true, true)
 local THUNDER_JUMP_POST_EVENT = 'ThunderJumpPost'
+local available_labels = {}
 
 ---@class Thunder.Config
 local default_opts = {
@@ -35,7 +36,7 @@ local function generate_unused_labels()
   end
   local result =
     vim.list.unique(vim.list_extend(vim.split(M.options.label.chars, ''), uppercase_chars))
-  return vim.iter(result):rev():totable()
+  return result
 end
 
 ---@return string The input from the user
@@ -62,6 +63,16 @@ local function jump(win, cursor_pos)
     })
     end)
 end
+---@param current integer current item index
+---@param total integer total item in the match
+---@return integer
+local function get_label_idx(current, total)
+    local result = current % total
+    if result == 0 then
+        result = current
+    end
+    return result
+end
 M.setup = function(opts)
   M.options = vim.tbl_deep_extend('force', {}, default_opts, opts or {})
 
@@ -71,6 +82,7 @@ M.setup = function(opts)
   for hl_group, link in pairs(links) do
     vim.api.nvim_set_hl(0, hl_group, { link = link, default = true })
   end
+  available_labels = generate_unused_labels()
 end
 
 ---@param win integer
@@ -100,7 +112,6 @@ end
 
 M.search = function()
   local label_pos = {}
-  local available_labels = generate_unused_labels()
   local win = vim.api.nvim_get_current_win()
   local pattern = vim.fn.getcmdline()
   -- REF https://github.com/folke/flash.nvim/blob/fcea7ff883235d9024dc41e638f164a450c14ca2/lua/flash/plugins/search.lua#L51
@@ -111,8 +122,10 @@ M.search = function()
   if #matches == 1 then
     return
   end
-  for _, match in ipairs(matches) do
-    local label = table.remove(available_labels)
+  
+  for i, match in ipairs(matches) do
+    local label_idx = get_label_idx( i, #matches)
+    local label = available_labels[label_idx]
     if label == '' then
       break
     end
