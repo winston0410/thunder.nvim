@@ -1,7 +1,7 @@
 local M = {}
 local THUNDER_NS = vim.api.nvim_create_namespace('thunder')
 local ESC_KEY = vim.api.nvim_replace_termcodes('<esc>', true, true, true)
-local label_pos = {}
+local THUNDER_JUMP_POST_EVENT = 'ThunderJumpPost'
 
 ---@class Thunder.Config
 local default_opts = {
@@ -14,6 +14,14 @@ local default_opts = {
     base_priority = 5000,
     label = 'FlashLabel',
   },
+  jump = {
+    jumplist = true,
+    open_fold = true,
+  },
+  prompt = {
+    enabled = true,
+    message = '🔦 Pick a target or press <ESC> to end the jump:',
+  },
 }
 
 ---@type Thunder.Config
@@ -21,12 +29,13 @@ M.options = {}
 
 ---@return string[]
 local function generate_unused_labels()
-    local uppercase_chars = {}
-    if M.options.label.uppercase then
-        uppercase_chars = vim.split(M.options.label.chars:upper(), "")
-    end
-    local result = vim.list.unique(vim.list_extend(vim.split(M.options.label.chars, ""),uppercase_chars ))
-    return vim.iter(result):rev():totable()
+  local uppercase_chars = {}
+  if M.options.label.uppercase then
+    uppercase_chars = vim.split(M.options.label.chars:upper(), '')
+  end
+  local result =
+    vim.list.unique(vim.list_extend(vim.split(M.options.label.chars, ''), uppercase_chars))
+  return vim.iter(result):rev():totable()
 end
 
 M.setup = function(opts)
@@ -38,7 +47,6 @@ M.setup = function(opts)
   for hl_group, link in pairs(links) do
     vim.api.nvim_set_hl(0, hl_group, { link = link, default = true })
   end
-
 end
 
 ---@param win integer
@@ -67,6 +75,7 @@ local function get_all_matches(win, pattern)
 end
 
 M.search = function()
+  local label_pos = {}
   local available_labels = generate_unused_labels()
   local win = vim.api.nvim_get_current_win()
   local pattern = vim.fn.getcmdline()
@@ -95,6 +104,9 @@ M.search = function()
     })
   end
   vim.cmd.redraw()
+  if M.options.prompt.enabled then
+    vim.api.nvim_echo({ { M.options.prompt.message } }, false, {})
+  end
   local ok, ret = pcall(vim.fn.getcharstr)
   if not ok or ret == ESC_KEY then
     vim.api.nvim_buf_clear_namespace(0, THUNDER_NS, 0, -1)
@@ -107,7 +119,13 @@ M.search = function()
   end
   -- NOTE run cursor setting in next event loop, as the cursor setting for search result will happen in this loop, and we cannot stop it
   vim.schedule(function()
+    if M.options.jump.jumplist then
+      vim.cmd('normal! m`')
+    end
     vim.api.nvim_win_set_cursor(win, cursor_pos)
+    vim.api.nvim_exec_autocmds('User', {
+      pattern = THUNDER_JUMP_POST_EVENT,
+    })
   end)
 end
 
