@@ -1,8 +1,6 @@
 local M = {}
 local THUNDER_NS = vim.api.nvim_create_namespace('thunder')
 local ESC_KEY = vim.api.nvim_replace_termcodes('<esc>', true, true, true)
-local unused_labels = {}
-local available_labels = {}
 local label_pos = {}
 
 ---@class Thunder.Config
@@ -21,17 +19,6 @@ local default_opts = {
 ---@type Thunder.Config
 M.options = {}
 
-local function is_search()
-  local t = vim.fn.getcmdtype()
-  return t == '/' or t == '?'
-end
-
----@return string An unused label from the label pool
-local function get_next_label()
-  local next = table.remove(unused_labels)
-  return next
-end
-
 ---@return string[]
 local function generate_unused_labels()
     local uppercase_chars = {}
@@ -44,8 +31,6 @@ end
 
 M.setup = function(opts)
   M.options = vim.tbl_deep_extend('force', {}, default_opts, opts or {})
-  available_labels =  generate_unused_labels()
-  unused_labels = available_labels
 
   local links = {
     [M.options.highlight.label] = 'Substitute',
@@ -54,28 +39,6 @@ M.setup = function(opts)
     vim.api.nvim_set_hl(0, hl_group, { link = link, default = true })
   end
 
-  local group = vim.api.nvim_create_augroup('thunder', { clear = true })
-  vim.api.nvim_create_autocmd('CmdlineLeave', {
-    group = group,
-    callback = function()
-      if vim.v.event.abort then
-        return
-      end
-      if not is_search() then
-        return
-      end
-      M.update()
-    end,
-  })
-  vim.api.nvim_create_autocmd('CmdlineEnter', {
-    group = group,
-    callback = function()
-      if not is_search() then
-        return
-      end
-      M.reset()
-    end,
-  })
 end
 
 ---@param win integer
@@ -103,7 +66,8 @@ local function get_all_matches(win, pattern)
   return visible_result
 end
 
-M.update = function()
+M.search = function()
+  local available_labels = generate_unused_labels()
   local win = vim.api.nvim_get_current_win()
   local pattern = vim.fn.getcmdline()
   -- REF https://github.com/folke/flash.nvim/blob/fcea7ff883235d9024dc41e638f164a450c14ca2/lua/flash/plugins/search.lua#L51
@@ -115,7 +79,7 @@ M.update = function()
     return
   end
   for _, match in ipairs(matches) do
-    local label = get_next_label()
+    local label = table.remove(available_labels)
     if label == '' then
       break
     end
@@ -145,11 +109,6 @@ M.update = function()
   vim.schedule(function()
     vim.api.nvim_win_set_cursor(win, cursor_pos)
   end)
-end
-
-M.reset = function()
-  unused_labels = available_labels
-  label_pos = {}
 end
 
 return M
