@@ -1,7 +1,8 @@
 local M = {}
 local THUNDER_NS = vim.api.nvim_create_namespace('thunder')
 local ESC_KEY = vim.api.nvim_replace_termcodes('<esc>', true, true, true)
-local unused_labels = ''
+local unused_labels = {}
+local available_labels = {}
 local label_pos = {}
 
 ---@class Thunder.Config
@@ -9,6 +10,7 @@ local default_opts = {
   label = {
     chars = 'qwertyuiop[asdfghjkl;zxcvbnm,.',
     style = 'overlay',
+    uppercase = true,
   },
   highlight = {
     base_priority = 5000,
@@ -26,14 +28,24 @@ end
 
 ---@return string An unused label from the label pool
 local function get_next_label()
-  local next = unused_labels:sub(1, 1)
-  unused_labels = unused_labels:sub(2)
+  local next = table.remove(unused_labels)
   return next
+end
+
+---@return string[]
+local function generate_unused_labels()
+    local uppercase_chars = {}
+    if M.options.label.uppercase then
+        uppercase_chars = vim.split(M.options.label.chars:upper(), "")
+    end
+    local result = vim.list.unique(vim.list_extend(vim.split(M.options.label.chars, ""),uppercase_chars ))
+    return vim.iter(result):rev():totable()
 end
 
 M.setup = function(opts)
   M.options = vim.tbl_deep_extend('force', {}, default_opts, opts or {})
-  unused_labels = M.options.label.chars
+  available_labels =  generate_unused_labels()
+  unused_labels = available_labels
 
   local links = {
     [M.options.highlight.label] = 'Substitute',
@@ -136,7 +148,7 @@ M.update = function()
 end
 
 M.reset = function()
-  unused_labels = M.options.label.chars
+  unused_labels = available_labels
   label_pos = {}
 end
 
