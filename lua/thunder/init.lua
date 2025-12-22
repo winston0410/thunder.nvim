@@ -38,6 +38,30 @@ local function generate_unused_labels()
   return vim.iter(result):rev():totable()
 end
 
+---@return string The input from the user
+local function get_user_input()
+  vim.cmd.redraw()
+  local ok, ret = pcall(vim.fn.getcharstr)
+  if not ok or ret == ESC_KEY then
+    return ""
+  end
+  return ret
+end
+
+---@param win integer
+---@param cursor_pos vim.Pos
+local function jump(win, cursor_pos)
+    -- NOTE run cursor setting in next event loop, as the cursor setting for search result will happen in this loop, and we cannot stop it
+    vim.schedule(function()
+    if M.options.jump.jumplist then
+      vim.cmd('normal! m`')
+    end
+    vim.api.nvim_win_set_cursor(win, cursor_pos)
+    vim.api.nvim_exec_autocmds('User', {
+      pattern = THUNDER_JUMP_POST_EVENT,
+    })
+    end)
+end
 M.setup = function(opts)
   M.options = vim.tbl_deep_extend('force', {}, default_opts, opts or {})
 
@@ -103,30 +127,16 @@ M.search = function()
       strict = true,
     })
   end
-  vim.cmd.redraw()
   if M.options.prompt.enabled then
     vim.api.nvim_echo({ { M.options.prompt.message } }, false, {})
   end
-  local ok, ret = pcall(vim.fn.getcharstr)
-  if not ok or ret == ESC_KEY then
-    vim.api.nvim_buf_clear_namespace(0, THUNDER_NS, 0, -1)
-    return
-  end
-  local cursor_pos = label_pos[ret]
+  local ret = get_user_input()
   vim.api.nvim_buf_clear_namespace(0, THUNDER_NS, 0, -1)
+  local cursor_pos = label_pos[ret]
   if cursor_pos == nil then
     return
   end
-  -- NOTE run cursor setting in next event loop, as the cursor setting for search result will happen in this loop, and we cannot stop it
-  vim.schedule(function()
-    if M.options.jump.jumplist then
-      vim.cmd('normal! m`')
-    end
-    vim.api.nvim_win_set_cursor(win, cursor_pos)
-    vim.api.nvim_exec_autocmds('User', {
-      pattern = THUNDER_JUMP_POST_EVENT,
-    })
-  end)
+  jump(win, cursor_pos)
 end
 
 return M
