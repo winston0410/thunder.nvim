@@ -8,8 +8,9 @@ local available_labels = {}
 local default_opts = {
   label = {
     chars = 'qwertyuiop[asdfghjkl;zxcvbnm,.',
+    -- chars = 'ab',
     style = 'overlay',
-    uppercase = true,
+    uppercase = false,
   },
   highlight = {
     base_priority = 5000,
@@ -47,7 +48,7 @@ local function get_user_input()
   -- end
   local ok, ret = pcall(vim.fn.getcharstr)
   if not ok or ret == ESC_KEY then
-    return ""
+    return ''
   end
   return ret
 end
@@ -55,23 +56,23 @@ end
 ---@param win integer
 ---@param cursor_pos vim.Pos
 local function jump(win, cursor_pos)
-    if M.options.jump.jumplist then
-      vim.cmd('normal! m`')
-    end
-    vim.api.nvim_win_set_cursor(win, cursor_pos)
-    vim.api.nvim_exec_autocmds('User', {
-      pattern = THUNDER_JUMP_POST_EVENT,
-    })
+  if M.options.jump.jumplist then
+    vim.cmd('normal! m`')
+  end
+  vim.api.nvim_win_set_cursor(win, cursor_pos:to_cursor())
+  vim.api.nvim_exec_autocmds('User', {
+    pattern = THUNDER_JUMP_POST_EVENT,
+  })
 end
 ---@param current integer current item index
----@param total integer total item in the match
+---@param total integer total label count
 ---@return integer
 local function get_label_idx(current, total)
-    local result = current % total
-    if result == 0 then
-        result = current
-    end
-    return result
+  local result = current % total
+  if result == 0 then
+    result = current
+  end
+  return result
 end
 M.setup = function(opts)
   M.options = vim.tbl_deep_extend('force', {}, default_opts, opts or {})
@@ -110,6 +111,18 @@ local function get_all_matches(win, pattern)
   return visible_result
 end
 
+---@param label string Label for the extmark
+---@param pos vim.Pos Position for the extmark
+local function set_label(label, pos)
+      local extmark_pos = pos:to_extmark()
+      vim.api.nvim_buf_set_extmark(0, THUNDER_NS, extmark_pos[1], extmark_pos[2], {
+        priority = M.options.highlight.base_priority,
+        virt_text = { { label, M.options.highlight.label } },
+        virt_text_pos = M.options.label.style,
+        strict = true,
+      })
+end
+
 M.search = function()
   local label_pos = {}
   local win = vim.api.nvim_get_current_win()
@@ -122,33 +135,49 @@ M.search = function()
   if #matches == 1 then
     return
   end
-  
-  -- NOTE run all the labelling in the next event loop, so the highlight and cursor position of search can be placed correctly
-  vim.schedule(function ()
-      for i, match in ipairs(matches) do
-        local label_idx = get_label_idx( i, #matches)
-        local label = available_labels[label_idx]
-        if label == '' then
-          break
-        end
-        local pos = vim.pos(match[1] - 1, match[2] - 1)
 
-        label_pos[label] = pos:to_cursor()
-        local extmark_pos = pos:to_extmark()
-        vim.api.nvim_buf_set_extmark(0, THUNDER_NS, extmark_pos[1], extmark_pos[2], {
-          priority = M.options.highlight.base_priority,
-          virt_text = { { label, M.options.highlight.label } },
-          virt_text_pos = M.options.label.style,
-          strict = true,
-        })
+  -- NOTE run all the labelling in the next event loop, so the highlight and cursor position of search can be placed correctly
+  vim.schedule(function()
+    for i, match in ipairs(matches) do
+      local label_idx = get_label_idx(i, #available_labels)
+      local round = math.ceil(i / #available_labels)
+      local label = available_labels[label_idx]
+      local pos = vim.pos(match[1] - 1, match[2] - 1)
+
+      if label_pos[label] == nil then
+        label_pos[label] = pos
+      else
+        local adjusted_label = available_labels[round]
+        local current_value = label_pos[label]
+        -- check if the current is pos or not
+        if getmetatable(current_value) == vim.pos then
+          local first_label = available_labels[1]
+          label_pos[label] = {
+            [first_label] = current_value,
+          }
+        end
+        label_pos[label][adjusted_label] = pos
       end
-      local ret = get_user_input()
-      vim.api.nvim_buf_clear_namespace(0, THUNDER_NS, 0, -1)
-      local cursor_pos = label_pos[ret]
-      if cursor_pos == nil then
-        return
-      end
-      jump(win, cursor_pos)
+      set_label(label, pos)
+    end
+    local target_dict = label_pos
+
+    while true do
+        local ret = get_user_input()
+        local value = target_dict[ret]
+        if value == nil then
+            return
+        end
+        vim.api.nvim_buf_clear_namespace(0, THUNDER_NS, 0, -1)
+        if getmetatable(value) == vim.pos then
+            jump(win, value)
+            return
+        end
+        for label, pos in pairs(value) do
+          set_label(label,pos)
+        end
+        target_dict = value
+    end
   end)
 end
 
