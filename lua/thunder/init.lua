@@ -1,21 +1,19 @@
 local M = {}
 local THUNDER_NS = vim.api.nvim_create_namespace('thunder')
-local ESC_KEY = vim.api.nvim_replace_termcodes("<esc>", true, true, true)
+local ESC_KEY = vim.api.nvim_replace_termcodes('<esc>', true, true, true)
 local unused_labels = ''
 local label_pos = {}
 
 ---@class Thunder.Config
 local default_opts = {
-  labels = 'qwertyuiop[asdfghjkl;zxcvbnm,.',
   label = {
-    before = true,
-    after = false,
-    uppercase = true,
+    chars = 'qwertyuiop[asdfghjkl;zxcvbnm,.',
     style = 'overlay',
   },
   highlight = {
-    priority = 5000,
-  }
+    base_priority = 5000,
+    label = 'FlashLabel',
+  },
 }
 
 ---@type Thunder.Config
@@ -35,16 +33,10 @@ end
 
 M.setup = function(opts)
   M.options = vim.tbl_deep_extend('force', {}, default_opts, opts or {})
-  unused_labels = M.options.labels
+  unused_labels = M.options.label.chars
 
   local links = {
-    FlashBackdrop = 'Comment',
-    FlashMatch = 'Search',
-    FlashCurrent = 'IncSearch',
-    FlashLabel = 'Substitute',
-    FlashPrompt = 'MsgArea',
-    FlashPromptIcon = 'Special',
-    FlashCursor = 'Cursor',
+    [M.options.highlight.label] = 'Substitute',
   }
   for hl_group, link in pairs(links) do
     vim.api.nvim_set_hl(0, hl_group, { link = link, default = true })
@@ -74,9 +66,9 @@ M.setup = function(opts)
   })
 end
 
+---@param win integer
 ---@param pattern string
-local function get_all_matches(pattern)
-  local win = vim.api.nvim_get_current_win()
+local function get_all_matches(win, pattern)
   local view = vim.api.nvim_win_call(win, vim.fn.winsaveview)
   -- start searching
   vim.api.nvim_win_set_cursor(win, { 1, 0 })
@@ -106,9 +98,9 @@ M.update = function()
   if pattern:sub(1, 1) == vim.fn.getcmdtype() then
     pattern = vim.fn.getreg('/') .. pattern:sub(2)
   end
-  local matches = get_all_matches(pattern)
+  local matches = get_all_matches(win, pattern)
   if #matches == 1 then
-      return
+    return
   end
   for _, match in ipairs(matches) do
     local label = get_next_label()
@@ -120,31 +112,31 @@ M.update = function()
     label_pos[label] = pos:to_cursor()
     local extmark_pos = pos:to_extmark()
     vim.api.nvim_buf_set_extmark(0, THUNDER_NS, extmark_pos[1], extmark_pos[2], {
-      priority = M.options.highlight.priority,
-      virt_text = { { label, 'FlashLabel' } },
+      priority = M.options.highlight.base_priority,
+      virt_text = { { label, M.options.highlight.label } },
       virt_text_pos = M.options.label.style,
-      strict = true
+      strict = true,
     })
   end
   vim.cmd.redraw()
   local ok, ret = pcall(vim.fn.getcharstr)
   if not ok or ret == ESC_KEY then
-      vim.api.nvim_buf_clear_namespace(0, THUNDER_NS, 0, -1)
-      return
+    vim.api.nvim_buf_clear_namespace(0, THUNDER_NS, 0, -1)
+    return
   end
   local cursor_pos = label_pos[ret]
   vim.api.nvim_buf_clear_namespace(0, THUNDER_NS, 0, -1)
   if cursor_pos == nil then
-      return
+    return
   end
   -- NOTE run cursor setting in next event loop, as the cursor setting for search result will happen in this loop, and we cannot stop it
   vim.schedule(function()
-      vim.api.nvim_win_set_cursor(win, cursor_pos)
+    vim.api.nvim_win_set_cursor(win, cursor_pos)
   end)
 end
 
 M.reset = function()
-  unused_labels = M.options.labels
+  unused_labels = M.options.label.chars
   label_pos = {}
 end
 
