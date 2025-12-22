@@ -42,6 +42,9 @@ end
 ---@return string The input from the user
 local function get_user_input()
   vim.cmd.redraw()
+  -- if M.options.prompt.enabled then
+  --   vim.api.nvim_echo({ { M.options.prompt.message } }, false, {})
+  -- end
   local ok, ret = pcall(vim.fn.getcharstr)
   if not ok or ret == ESC_KEY then
     return ""
@@ -52,8 +55,6 @@ end
 ---@param win integer
 ---@param cursor_pos vim.Pos
 local function jump(win, cursor_pos)
-    -- NOTE run cursor setting in next event loop, as the cursor setting for search result will happen in this loop, and we cannot stop it
-    vim.schedule(function()
     if M.options.jump.jumplist then
       vim.cmd('normal! m`')
     end
@@ -61,7 +62,6 @@ local function jump(win, cursor_pos)
     vim.api.nvim_exec_autocmds('User', {
       pattern = THUNDER_JUMP_POST_EVENT,
     })
-    end)
 end
 ---@param current integer current item index
 ---@param total integer total item in the match
@@ -123,33 +123,33 @@ M.search = function()
     return
   end
   
-  for i, match in ipairs(matches) do
-    local label_idx = get_label_idx( i, #matches)
-    local label = available_labels[label_idx]
-    if label == '' then
-      break
-    end
-    local pos = vim.pos(match[1] - 1, match[2] - 1)
+  -- NOTE run all the labelling in the next event loop, so the highlight and cursor position of search can be placed correctly
+  vim.schedule(function ()
+      for i, match in ipairs(matches) do
+        local label_idx = get_label_idx( i, #matches)
+        local label = available_labels[label_idx]
+        if label == '' then
+          break
+        end
+        local pos = vim.pos(match[1] - 1, match[2] - 1)
 
-    label_pos[label] = pos:to_cursor()
-    local extmark_pos = pos:to_extmark()
-    vim.api.nvim_buf_set_extmark(0, THUNDER_NS, extmark_pos[1], extmark_pos[2], {
-      priority = M.options.highlight.base_priority,
-      virt_text = { { label, M.options.highlight.label } },
-      virt_text_pos = M.options.label.style,
-      strict = true,
-    })
-  end
-  if M.options.prompt.enabled then
-    vim.api.nvim_echo({ { M.options.prompt.message } }, false, {})
-  end
-  local ret = get_user_input()
-  vim.api.nvim_buf_clear_namespace(0, THUNDER_NS, 0, -1)
-  local cursor_pos = label_pos[ret]
-  if cursor_pos == nil then
-    return
-  end
-  jump(win, cursor_pos)
+        label_pos[label] = pos:to_cursor()
+        local extmark_pos = pos:to_extmark()
+        vim.api.nvim_buf_set_extmark(0, THUNDER_NS, extmark_pos[1], extmark_pos[2], {
+          priority = M.options.highlight.base_priority,
+          virt_text = { { label, M.options.highlight.label } },
+          virt_text_pos = M.options.label.style,
+          strict = true,
+        })
+      end
+      local ret = get_user_input()
+      vim.api.nvim_buf_clear_namespace(0, THUNDER_NS, 0, -1)
+      local cursor_pos = label_pos[ret]
+      if cursor_pos == nil then
+        return
+      end
+      jump(win, cursor_pos)
+  end)
 end
 
 return M
