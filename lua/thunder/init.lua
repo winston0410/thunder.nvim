@@ -8,7 +8,6 @@ local available_labels = {}
 local default_opts = {
   label = {
     chars = 'qwertyuiop[asdfghjkl;zxcvbnm,.',
-    -- chars = 'ab',
     style = 'overlay',
     uppercase = false,
   },
@@ -42,14 +41,16 @@ end
 
 ---@return string The input from the user
 local function get_user_input()
-  vim.cmd.redraw()
-  -- if M.options.prompt.enabled then
-  --   vim.api.nvim_echo({ { M.options.prompt.message } }, false, {})
-  -- end
+  if M.options.prompt.enabled then
+    -- https://github.com/nvim-mini/mini.jump2d/blob/7a089cb719adb7c2faa2a859038d69d58fcbee84/lua/mini/jump2d.lua#L1105C59-L1105C72
+    vim.cmd([[echo '' | redraw]])
+    vim.api.nvim_echo({ { M.options.prompt.message } }, false, {})
+  end
   local ok, ret = pcall(vim.fn.getcharstr)
   if not ok or ret == ESC_KEY then
     return ''
   end
+  vim.cmd([[echo '' | redraw]])
   return ret
 end
 
@@ -164,11 +165,11 @@ M.search = function()
 
     while true do
         local ret = get_user_input()
+        vim.api.nvim_buf_clear_namespace(0, THUNDER_NS, 0, -1)
         local value = target_dict[ret]
         if value == nil then
             return
         end
-        vim.api.nvim_buf_clear_namespace(0, THUNDER_NS, 0, -1)
         if getmetatable(value) == vim.pos then
             jump(win, value)
             return
